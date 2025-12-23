@@ -49,9 +49,9 @@ public class LedMappingSession implements CommandLineRunner {
     private static final int SETTLE_FRAMES = 6;        // Frames to wait for camera
     private static final int CONFIRM_FRAMES = 3;       // Frames to confirm detection
     
-    // Brightness stepping - start low, increase until we see the LED
-    private static final int BRIGHTNESS_START = 1;
-    private static final int BRIGHTNESS_MAX = 50;
+    // Brightness stepping - configurable start, increase until we see the LED
+    private int brightnessStart = 50;  // Default to max brightness
+    private static final int BRIGHTNESS_MAX = 100;
     private static final int BRIGHTNESS_STEP = 1;
 
     private volatile boolean running = true;
@@ -65,7 +65,7 @@ public class LedMappingSession implements CommandLineRunner {
     private State state = State.IDLE;
     private Mat baselineFrame = null;
     private int frameCounter = 0;
-    private int currentBrightness = BRIGHTNESS_START;
+    private int currentBrightness = 50;  // Will be set from brightnessStart
     private List<Point> candidatePoints = new ArrayList<>();
     private volatile boolean saveDebugFrame = false;
     
@@ -86,9 +86,16 @@ public class LedMappingSession implements CommandLineRunner {
         if (args.length > 1) {
             totalLeds = Integer.parseInt(args[1]);
         }
+        
+        if (args.length > 2) {
+            brightnessStart = Integer.parseInt(args[2]);
+            brightnessStart = Math.max(1, Math.min(BRIGHTNESS_MAX, brightnessStart));
+        }
+        currentBrightness = brightnessStart;
 
         logger.info("=== LED MAPPING with BRIGHTNESS STEPPING ===");
-        logger.info("Brightness: {}% to {}% in {}% steps", BRIGHTNESS_START, BRIGHTNESS_MAX, BRIGHTNESS_STEP);
+        logger.info("Brightness: {}% to {}% in {}% steps", brightnessStart, BRIGHTNESS_MAX, BRIGHTNESS_STEP);
+        logger.info("Usage: --map-leds <led_count> [brightness]");
         logger.info("Controls: SPACE=Start/Stop, S=Save, R=Reset, Q=Quit");
 
         startSession();
@@ -591,7 +598,7 @@ public class LedMappingSession implements CommandLineRunner {
         } else {
             mappingActive = true;
             currentLedIndex = 0;
-            currentBrightness = BRIGHTNESS_START;
+            currentBrightness = brightnessStart;
             startLedCapture();
             logger.info("Mapping started");
         }
@@ -601,7 +608,7 @@ public class LedMappingSession implements CommandLineRunner {
         sendPixelblazeCommand("off");
         state = State.CAPTURING_BASELINE;
         frameCounter = 0;
-        currentBrightness = BRIGHTNESS_START;
+        currentBrightness = brightnessStart;
         candidatePoints.clear();
     }
 
@@ -626,7 +633,7 @@ public class LedMappingSession implements CommandLineRunner {
         mappingActive = false;
         state = State.IDLE;
         currentLedIndex = -1;
-        currentBrightness = BRIGHTNESS_START;
+        currentBrightness = brightnessStart;
         detectedPositions.clear();
         candidatePoints.clear();
         sendPixelblazeCommand("off");
