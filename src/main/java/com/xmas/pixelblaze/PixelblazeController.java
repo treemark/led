@@ -130,8 +130,7 @@ public class PixelblazeController implements AutoCloseable {
             
             if (success.get()) {
                 logger.info("Successfully connected to Pixelblaze");
-                // Clear all pixels on connect
-                clearAll();
+                // Don't clear on connect - let caller decide
                 return true;
             }
             
@@ -182,7 +181,8 @@ public class PixelblazeController implements AutoCloseable {
      */
     public void clearAll() {
         java.util.Arrays.fill(pixelData, (byte) 0);
-        sendFrame();
+        // Use setVars to turn off all LEDs (mode=0)
+        setVars(0, 0, 0, 0, 0);
     }
 
     /**
@@ -223,11 +223,45 @@ public class PixelblazeController implements AutoCloseable {
 
     /**
      * Light only the specified pixel (all others off).
+     * Uses setVars to control the pattern loaded on the Pixelblaze.
      */
     public void lightOnlyPixel(int index, int r, int g, int b) {
-        clearAll();
-        setPixel(index, r, g, b);
-        sendFrame();
+        // mode=1 for single LED, convert RGB 0-255 to 0-1 range
+        setVars(1, index, r / 255.0, g / 255.0, b / 255.0);
+    }
+
+    /**
+     * Light all pixels with a single color.
+     */
+    public void lightAll(int r, int g, int b) {
+        // mode=2 for all LEDs same color
+        setVars(2, 0, r / 255.0, g / 255.0, b / 255.0);
+    }
+
+    /**
+     * Set variables on the Pixelblaze pattern.
+     * Pattern expects: mode, ledIndex, r, g, b
+     */
+    private void setVars(int mode, int ledIndex, double r, double g, double b) {
+        if (!isConnected()) {
+            logger.warn("Not connected to Pixelblaze");
+            return;
+        }
+
+        try {
+            String json = String.format(
+                "{\"setVars\":{\"mode\":%d,\"ledIndex\":%d,\"r\":%.4f,\"g\":%.4f,\"b\":%.4f}}",
+                mode, ledIndex, r, g, b
+            );
+            logger.info("Sending: {}", json);
+            // Wait for the send to complete
+            webSocket.sendText(json, true).join();
+            // Small delay to ensure Pixelblaze processes the command
+            Thread.sleep(50);
+            logger.info("setVars sent: mode={}, ledIndex={}, r={}, g={}, b={}", mode, ledIndex, r, g, b);
+        } catch (Exception e) {
+            logger.error("Failed to setVars: {}", e.getMessage());
+        }
     }
 
     /**
@@ -377,7 +411,7 @@ public class PixelblazeController implements AutoCloseable {
     public void close() {
         if (webSocket != null) {
             try {
-                clearAll();
+                // Don't clear LEDs on close - let them stay in their current state
                 webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "closing");
                 logger.info("Pixelblaze connection closed");
             } catch (Exception e) {

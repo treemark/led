@@ -23,7 +23,9 @@ dependencies {
     
     // OpenCV - Java bindings via OpenPnP's packaged version
     implementation 'org.openpnp:opencv:4.9.0-0'
-    
+    testImplementation 'junit:junit:4.13.2'
+    testRuntimeOnly 'org.junit.vintage:junit-vintage-engine'
+
     // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }

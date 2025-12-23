@@ -12,6 +12,8 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import com.xmas.pixelblaze.PixelblazeController;
+
 import javax.swing.*;
 import java.awt.Graphics;
 import java.awt.event.KeyAdapter;
@@ -66,16 +68,14 @@ public class LedMappingSession implements CommandLineRunner {
     private int currentBrightness = BRIGHTNESS_START;
     private List<Point> candidatePoints = new ArrayList<>();
     private volatile boolean saveDebugFrame = false;
-    private int debugFrameCount = 0;
     
     // Maximum expected distance between consecutive LEDs (in pixels)
     // Looking at correct detections: LEDs 0-7 span X=553 to X=439 = ~114px over 7 LEDs = ~16px each
     // Allow 50px for normal spacing to reject false positives
     private static final double MAX_LED_DISTANCE = 50.0;
 
-    private Process pixelblazeProcess;
-    private PrintWriter pixelblazeWriter;
-    private BufferedReader pixelblazeReader;
+    private static final String PIXELBLAZE_HOST = "192.168.86.65";
+    private PixelblazeController pixelblazeController;
 
     @Override
     public void run(String... args) throws Exception {
@@ -282,8 +282,8 @@ public class LedMappingSession implements CommandLineRunner {
 
         drawOverlay(display);
         
-        // Save debug frame if requested (press D) or automatically for first 16 LEDs
-        if (saveDebugFrame || (currentLedIndex < 16 && state == State.CONFIRMING)) {
+        // Save debug frame if requested (press D)
+        if (saveDebugFrame) {
             saveDebugFrame = false;
             String filename = String.format("debug_led_%02d.png", currentLedIndex);
             Imgcodecs.imwrite(filename, display);
@@ -666,18 +666,12 @@ public class LedMappingSession implements CommandLineRunner {
 
     private boolean startPixelblazeController() {
         try {
-            ProcessBuilder pb = new ProcessBuilder("python3", "pixelblaze_controller.py");
-            pb.redirectErrorStream(true);
-            pixelblazeProcess = pb.start();
-            pixelblazeWriter = new PrintWriter(pixelblazeProcess.getOutputStream(), true);
-            pixelblazeReader = new BufferedReader(new InputStreamReader(pixelblazeProcess.getInputStream()));
-
-            String response = pixelblazeReader.readLine();
-            if ("READY".equals(response)) {
-                logger.info("Pixelblaze controller ready");
+            pixelblazeController = new PixelblazeController(PIXELBLAZE_HOST, totalLeds);
+            if (pixelblazeController.connect()) {
+                logger.info("Pixelblaze controller ready (Java WebSocket)");
                 return true;
             }
-            logger.error("Pixelblaze response: {}", response);
+            logger.error("Failed to connect to Pixelblaze");
             return false;
         } catch (Exception e) {
             logger.error("Failed to start Pixelblaze controller: {}", e.getMessage());
@@ -686,25 +680,33 @@ public class LedMappingSession implements CommandLineRunner {
     }
 
     private void sendPixelblazeCommand(String cmd) {
-        if (pixelblazeWriter != null) {
-            pixelblazeWriter.println(cmd);
-            try {
-                String response = pixelblazeReader.readLine();
-                if (!"OK".equals(response)) {
-                    logger.warn("Pixelblaze response: {}", response);
+        if (pixelblazeController == null || !pixelblazeController.isConnected()) {
+            return;
+        }
+        
+        try {
+            if ("off".equals(cmd)) {
+                pixelblazeController.clearAll();
+            } else if (cmd.startsWith("pixel ")) {
+                // Parse: "pixel <index> <brightness>"
+                String[] parts = cmd.split(" ");
+                if (parts.length >= 3) {
+                    int index = Integer.parseInt(parts[1]);
+                    int brightness = Integer.parseInt(parts[2]);
+                    // Convert brightness 1-50 to RGB 0-255 (roughly 5x)
+                    int rgbValue = Math.min(255, brightness * 5);
+                    pixelblazeController.lightOnlyPixel(index, rgbValue, rgbValue, rgbValue);
                 }
-            } catch (IOException e) {
-                logger.error("Error reading Pixelblaze response: {}", e.getMessage());
             }
+        } catch (Exception e) {
+            logger.error("Error sending Pixelblaze command: {}", e.getMessage());
         }
     }
 
     private void stopPixelblazeController() {
-        if (pixelblazeWriter != null) {
-            pixelblazeWriter.println("quit");
-        }
-        if (pixelblazeProcess != null) {
-            pixelblazeProcess.destroyForcibly();
+        if (pixelblazeController != null) {
+            pixelblazeController.close();
+            pixelblazeController = null;
         }
     }
 

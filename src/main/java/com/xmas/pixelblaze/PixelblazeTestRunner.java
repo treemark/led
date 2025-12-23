@@ -16,6 +16,9 @@ import org.springframework.stereotype.Component;
  *   ./gradlew bootRun --args="--pixelblaze-blink 0 blue 256"
  *   ./gradlew bootRun --args="--pixelblaze-blink 255 red 256"
  *   ./gradlew bootRun --args="--pixelblaze-sequence <led_count>"
+ *   ./gradlew bootRun --args="--pixelblaze-pixel <index> <color> <led_count>"
+ *   ./gradlew bootRun --args="--pixelblaze-all-white <led_count>"
+ *   ./gradlew bootRun --args="--pixelblaze-off <led_count>"
  */
 @Component
 @Order(0)
@@ -35,6 +38,7 @@ public class PixelblazeTestRunner implements CommandLineRunner {
             case "--pixelblaze-sequence" -> runSequenceTest(args);
             case "--pixelblaze-all-white" -> runAllWhiteTest(args);
             case "--pixelblaze-off" -> runOffTest(args);
+            case "--pixelblaze-pixel" -> runPixelTest(args);
             default -> { return; }
         }
         
@@ -44,11 +48,11 @@ public class PixelblazeTestRunner implements CommandLineRunner {
     private void runConnectionTest(String[] args) {
         int ledCount = args.length > 1 ? Integer.parseInt(args[1]) : 256;
         
-        logger.info("=== PIXELBLAZE CONNECTION TEST (Python Bridge) ===");
+        logger.info("=== PIXELBLAZE CONNECTION TEST ===");
         logger.info("Host: {}", PIXELBLAZE_HOST);
         logger.info("LED count: {}", ledCount);
 
-        try (PixelblazePythonBridge controller = new PixelblazePythonBridge(PIXELBLAZE_HOST, ledCount)) {
+        try (PixelblazeController controller = new PixelblazeController(PIXELBLAZE_HOST, ledCount)) {
             if (!controller.connect()) {
                 logger.error("Failed to connect to Pixelblaze!");
                 return;
@@ -106,10 +110,10 @@ public class PixelblazeTestRunner implements CommandLineRunner {
             }
         }
 
-        logger.info("=== PIXELBLAZE BLINK TEST (Python Bridge) ===");
+        logger.info("=== PIXELBLAZE BLINK TEST ===");
         logger.info("Blinking {} LED at index {} (of {} total)", color.toUpperCase(), index, ledCount);
 
-        try (PixelblazePythonBridge controller = new PixelblazePythonBridge(PIXELBLAZE_HOST, ledCount)) {
+        try (PixelblazeController controller = new PixelblazeController(PIXELBLAZE_HOST, ledCount)) {
             if (!controller.connect()) {
                 logger.error("Failed to connect to Pixelblaze!");
                 return;
@@ -139,14 +143,14 @@ public class PixelblazeTestRunner implements CommandLineRunner {
         logger.info("=== PIXELBLAZE ALL WHITE TEST ===");
         logger.info("Lighting all {} LEDs WHITE", ledCount);
 
-        try (PixelblazePythonBridge controller = new PixelblazePythonBridge(PIXELBLAZE_HOST, ledCount)) {
+        try (PixelblazeController controller = new PixelblazeController(PIXELBLAZE_HOST, ledCount)) {
             if (!controller.connect()) {
                 logger.error("Failed to connect to Pixelblaze!");
                 return;
             }
 
             logger.info("Connected! Turning all LEDs WHITE...");
-            controller.allWhite();
+            controller.lightAll(255, 255, 255);
             logger.info("All LEDs are now WHITE. They will stay on.");
             logger.info("Run --pixelblaze-off to turn them off.");
             
@@ -161,7 +165,7 @@ public class PixelblazeTestRunner implements CommandLineRunner {
         logger.info("=== PIXELBLAZE OFF ===");
         logger.info("Turning off all {} LEDs", ledCount);
 
-        try (PixelblazePythonBridge controller = new PixelblazePythonBridge(PIXELBLAZE_HOST, ledCount)) {
+        try (PixelblazeController controller = new PixelblazeController(PIXELBLAZE_HOST, ledCount)) {
             if (!controller.connect()) {
                 logger.error("Failed to connect to Pixelblaze!");
                 return;
@@ -212,5 +216,42 @@ public class PixelblazeTestRunner implements CommandLineRunner {
             logger.error("Test failed: {}", e.getMessage(), e);
         }
     }
-}
 
+    private void runPixelTest(String[] args) {
+        int index = args.length > 1 ? Integer.parseInt(args[1]) : 0;
+        String color = args.length > 2 ? args[2].toLowerCase() : "white";
+        int ledCount = args.length > 3 ? Integer.parseInt(args[3]) : 256;
+
+        int r = 0, g = 0, b = 0;
+        switch (color) {
+            case "blue" -> b = 255;
+            case "red" -> r = 255;
+            case "green" -> g = 255;
+            case "white" -> { r = 255; g = 255; b = 255; }
+            default -> {
+                logger.error("Unknown color: {}. Use blue, red, green, or white.", color);
+                return;
+            }
+        }
+
+        logger.info("=== PIXELBLAZE PIXEL TEST ===");
+        logger.info("Lighting pixel {} {} (of {} total)", index, color.toUpperCase(), ledCount);
+
+        try (PixelblazeController controller = new PixelblazeController(PIXELBLAZE_HOST, ledCount)) {
+            if (!controller.connect()) {
+                logger.error("Failed to connect to Pixelblaze!");
+                return;
+            }
+
+            logger.info("Connected! Lighting pixel...");
+            controller.lightOnlyPixel(index, r, g, b);
+            logger.info("Pixel {} is now {}. It will stay on for 10 seconds.", index, color.toUpperCase());
+            Thread.sleep(10000);
+            controller.clearAll();
+            logger.info("Done.");
+            
+        } catch (Exception e) {
+            logger.error("Test failed: {}", e.getMessage(), e);
+        }
+    }
+}
