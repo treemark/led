@@ -8,6 +8,7 @@ import org.opencv.videoio.VideoCapture;
 import org.opencv.videoio.Videoio;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -49,8 +50,18 @@ public class LedMappingSession implements CommandLineRunner {
     private static final int SETTLE_FRAMES = 6;        // Frames to wait for camera
     private static final int CONFIRM_FRAMES = 3;       // Frames to confirm detection
     
+    // Configuration from application.properties
+    @Value("${pixelblaze.host:192.168.86.65}")
+    private String pixelblazeHost;
+    
+    @Value("${pixelblaze.led-count:300}")
+    private int defaultLedCount;
+    
+    @Value("${pixelblaze.brightness:50}")
+    private int defaultBrightness;
+    
     // Brightness stepping - configurable start, increase until we see the LED
-    private int brightnessStart = 50;  // Default to max brightness
+    private int brightnessStart;
     private static final int BRIGHTNESS_MAX = 100;
     private static final int BRIGHTNESS_STEP = 1;
 
@@ -58,14 +69,14 @@ public class LedMappingSession implements CommandLineRunner {
     private volatile boolean mappingActive = false;
     private volatile int currentLedIndex = -1;
     private final Map<Integer, Point> detectedPositions = Collections.synchronizedMap(new LinkedHashMap<>());
-    private int totalLeds = 256;
+    private int totalLeds;
     
     // State machine
     private enum State { IDLE, CAPTURING_BASELINE, WAITING_FOR_LED, CONFIRMING }
     private State state = State.IDLE;
     private Mat baselineFrame = null;
     private int frameCounter = 0;
-    private int currentBrightness = 50;  // Will be set from brightnessStart
+    private int currentBrightness;
     private List<Point> candidatePoints = new ArrayList<>();
     private volatile boolean saveDebugFrame = false;
     
@@ -74,7 +85,6 @@ public class LedMappingSession implements CommandLineRunner {
     // Allow 50px for normal spacing to reject false positives
     private static final double MAX_LED_DISTANCE = 50.0;
 
-    private static final String PIXELBLAZE_HOST = "192.168.86.65";
     private PixelblazeController pixelblazeController;
 
     @Override
@@ -83,19 +93,24 @@ public class LedMappingSession implements CommandLineRunner {
             return;
         }
 
+        // Use defaults from application.properties, allow command-line overrides
+        totalLeds = defaultLedCount;
+        brightnessStart = defaultBrightness;
+        
         if (args.length > 1) {
             totalLeds = Integer.parseInt(args[1]);
         }
         
         if (args.length > 2) {
             brightnessStart = Integer.parseInt(args[2]);
-            brightnessStart = Math.max(1, Math.min(BRIGHTNESS_MAX, brightnessStart));
         }
+        brightnessStart = Math.max(1, Math.min(BRIGHTNESS_MAX, brightnessStart));
         currentBrightness = brightnessStart;
 
         logger.info("=== LED MAPPING with BRIGHTNESS STEPPING ===");
-        logger.info("Brightness: {}% to {}% in {}% steps", brightnessStart, BRIGHTNESS_MAX, BRIGHTNESS_STEP);
-        logger.info("Usage: --map-leds <led_count> [brightness]");
+        logger.info("Pixelblaze host: {}", pixelblazeHost);
+        logger.info("LED count: {}, Brightness: {}% to {}%", totalLeds, brightnessStart, BRIGHTNESS_MAX);
+        logger.info("Usage: --map-leds [led_count] [brightness]  (defaults from application.properties)");
         logger.info("Controls: SPACE=Start/Stop, S=Save, R=Reset, Q=Quit");
 
         startSession();
@@ -696,7 +711,7 @@ public class LedMappingSession implements CommandLineRunner {
 
     private boolean startPixelblazeController() {
         try {
-            pixelblazeController = new PixelblazeController(PIXELBLAZE_HOST, totalLeds);
+            pixelblazeController = new PixelblazeController(pixelblazeHost, totalLeds);
             if (pixelblazeController.connect()) {
                 logger.info("Pixelblaze controller ready (Java WebSocket)");
                 return true;

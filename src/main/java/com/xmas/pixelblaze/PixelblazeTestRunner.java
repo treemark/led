@@ -2,6 +2,7 @@ package com.xmas.pixelblaze;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -9,16 +10,17 @@ import org.springframework.stereotype.Component;
 /**
  * Test runner for Pixelblaze LED control.
  * 
+ * Configuration is read from application.properties:
+ *   pixelblaze.host - IP address of the Pixelblaze
+ *   pixelblaze.led-count - Default number of LEDs
+ * 
  * Usage: 
- *   ./gradlew bootRun --args="--pixelblaze-test <led_count>"
- *   ./gradlew bootRun --args="--pixelblaze-test 256"
- *   ./gradlew bootRun --args="--pixelblaze-blink <index> <color> <led_count>"
- *   ./gradlew bootRun --args="--pixelblaze-blink 0 blue 256"
- *   ./gradlew bootRun --args="--pixelblaze-blink 255 red 256"
- *   ./gradlew bootRun --args="--pixelblaze-sequence <led_count>"
- *   ./gradlew bootRun --args="--pixelblaze-pixel <index> <color> <led_count>"
- *   ./gradlew bootRun --args="--pixelblaze-all-white <led_count>"
- *   ./gradlew bootRun --args="--pixelblaze-off <led_count>"
+ *   ./gradlew bootRun --args="--pixelblaze-test [led_count]"
+ *   ./gradlew bootRun --args="--pixelblaze-blink <index> <color> [led_count]"
+ *   ./gradlew bootRun --args="--pixelblaze-sequence [led_count]"
+ *   ./gradlew bootRun --args="--pixelblaze-pixel <index> <color> [led_count]"
+ *   ./gradlew bootRun --args="--pixelblaze-all-white [led_count]"
+ *   ./gradlew bootRun --args="--pixelblaze-off [led_count]"
  */
 @Component
 @Order(0)
@@ -26,7 +28,11 @@ public class PixelblazeTestRunner implements CommandLineRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(PixelblazeTestRunner.class);
 
-    private static final String PIXELBLAZE_HOST = "192.168.86.65";
+    @Value("${pixelblaze.host:192.168.86.65}")
+    private String pixelblazeHost;
+    
+    @Value("${pixelblaze.led-count:300}")
+    private int defaultLedCount;
 
     @Override
     public void run(String... args) throws Exception {
@@ -46,13 +52,13 @@ public class PixelblazeTestRunner implements CommandLineRunner {
     }
 
     private void runConnectionTest(String[] args) {
-        int ledCount = args.length > 1 ? Integer.parseInt(args[1]) : 256;
+        int ledCount = args.length > 1 ? Integer.parseInt(args[1]) : defaultLedCount;
         
         logger.info("=== PIXELBLAZE CONNECTION TEST ===");
-        logger.info("Host: {}", PIXELBLAZE_HOST);
+        logger.info("Host: {}", pixelblazeHost);
         logger.info("LED count: {}", ledCount);
 
-        try (PixelblazeController controller = new PixelblazeController(PIXELBLAZE_HOST, ledCount)) {
+        try (PixelblazeController controller = new PixelblazeController(pixelblazeHost, ledCount)) {
             if (!controller.connect()) {
                 logger.error("Failed to connect to Pixelblaze!");
                 return;
@@ -88,15 +94,15 @@ public class PixelblazeTestRunner implements CommandLineRunner {
     }
 
     private void runBlinkTest(String[] args) {
-        if (args.length < 4) {
-            logger.error("Usage: --pixelblaze-blink <index> <color> <led_count>");
+        if (args.length < 3) {
+            logger.error("Usage: --pixelblaze-blink <index> <color> [led_count]");
             logger.error("  color: blue, red, green, white");
             return;
         }
 
         int index = Integer.parseInt(args[1]);
         String color = args[2].toLowerCase();
-        int ledCount = Integer.parseInt(args[3]);
+        int ledCount = args.length > 3 ? Integer.parseInt(args[3]) : defaultLedCount;
 
         int r = 0, g = 0, b = 0;
         switch (color) {
@@ -113,7 +119,7 @@ public class PixelblazeTestRunner implements CommandLineRunner {
         logger.info("=== PIXELBLAZE BLINK TEST ===");
         logger.info("Blinking {} LED at index {} (of {} total)", color.toUpperCase(), index, ledCount);
 
-        try (PixelblazeController controller = new PixelblazeController(PIXELBLAZE_HOST, ledCount)) {
+        try (PixelblazeController controller = new PixelblazeController(pixelblazeHost, ledCount)) {
             if (!controller.connect()) {
                 logger.error("Failed to connect to Pixelblaze!");
                 return;
@@ -138,12 +144,12 @@ public class PixelblazeTestRunner implements CommandLineRunner {
     }
 
     private void runAllWhiteTest(String[] args) {
-        int ledCount = args.length > 1 ? Integer.parseInt(args[1]) : 256;
+        int ledCount = args.length > 1 ? Integer.parseInt(args[1]) : defaultLedCount;
         
         logger.info("=== PIXELBLAZE ALL WHITE TEST ===");
         logger.info("Lighting all {} LEDs WHITE", ledCount);
 
-        try (PixelblazeController controller = new PixelblazeController(PIXELBLAZE_HOST, ledCount)) {
+        try (PixelblazeController controller = new PixelblazeController(pixelblazeHost, ledCount)) {
             if (!controller.connect()) {
                 logger.error("Failed to connect to Pixelblaze!");
                 return;
@@ -160,12 +166,12 @@ public class PixelblazeTestRunner implements CommandLineRunner {
     }
 
     private void runOffTest(String[] args) {
-        int ledCount = args.length > 1 ? Integer.parseInt(args[1]) : 256;
+        int ledCount = args.length > 1 ? Integer.parseInt(args[1]) : defaultLedCount;
         
         logger.info("=== PIXELBLAZE OFF ===");
         logger.info("Turning off all {} LEDs", ledCount);
 
-        try (PixelblazeController controller = new PixelblazeController(PIXELBLAZE_HOST, ledCount)) {
+        try (PixelblazeController controller = new PixelblazeController(pixelblazeHost, ledCount)) {
             if (!controller.connect()) {
                 logger.error("Failed to connect to Pixelblaze!");
                 return;
@@ -180,13 +186,13 @@ public class PixelblazeTestRunner implements CommandLineRunner {
     }
 
     private void runSequenceTest(String[] args) {
-        int ledCount = args.length > 1 ? Integer.parseInt(args[1]) : 256;
+        int ledCount = args.length > 1 ? Integer.parseInt(args[1]) : defaultLedCount;
         
         logger.info("=== PIXELBLAZE SEQUENCE TEST ===");
         logger.info("Running detection sequence with {} LEDs", ledCount);
         logger.info("Blue (0) -> Green (1 to {}) -> Red ({})", ledCount - 2, ledCount - 1);
 
-        try (PixelblazeController controller = new PixelblazeController(PIXELBLAZE_HOST, ledCount)) {
+        try (PixelblazeController controller = new PixelblazeController(pixelblazeHost, ledCount)) {
             if (!controller.connect()) {
                 logger.error("Failed to connect to Pixelblaze!");
                 return;
@@ -220,7 +226,7 @@ public class PixelblazeTestRunner implements CommandLineRunner {
     private void runPixelTest(String[] args) {
         int index = args.length > 1 ? Integer.parseInt(args[1]) : 0;
         String color = args.length > 2 ? args[2].toLowerCase() : "white";
-        int ledCount = args.length > 3 ? Integer.parseInt(args[3]) : 256;
+        int ledCount = args.length > 3 ? Integer.parseInt(args[3]) : defaultLedCount;
 
         int r = 0, g = 0, b = 0;
         switch (color) {
@@ -237,7 +243,7 @@ public class PixelblazeTestRunner implements CommandLineRunner {
         logger.info("=== PIXELBLAZE PIXEL TEST ===");
         logger.info("Lighting pixel {} {} (of {} total)", index, color.toUpperCase(), ledCount);
 
-        try (PixelblazeController controller = new PixelblazeController(PIXELBLAZE_HOST, ledCount)) {
+        try (PixelblazeController controller = new PixelblazeController(pixelblazeHost, ledCount)) {
             if (!controller.connect()) {
                 logger.error("Failed to connect to Pixelblaze!");
                 return;
