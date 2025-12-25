@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixelblaze Map Editor</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --accent: #00ffc8;
+            --accent-dim: #00ffc833;
+            --warning: #ff6b6b;
+            --undetected: #666677;
+            --text-primary: #f0f0f5;
+            --text-secondary: #8888aa;
+            --border: #2a2a3a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            height: 100vh;
+        }
+
+        .canvas-container {
+            position: relative;
+            background: 
+                radial-gradient(circle at 20% 80%, #00ffc808 0%, transparent 40%),
+                radial-gradient(circle at 80% 20%, #ff6b6b08 0%, transparent 40%),
+                linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            overflow: hidden;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: crosshair;
+            box-shadow: 0 0 60px rgba(0, 255, 200, 0.1);
+        }
+
+        .sidebar {
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 24px 20px;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+        }
+
+        .sidebar-header h1 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 4px;
+            letter-spacing: -0.5px;
+        }
+
+        .sidebar-header p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .controls {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 500;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background: var(--bg-primary);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .btn.primary {
+            background: var(--accent);
+            color: var(--bg-primary);
+            border-color: var(--accent);
+        }
+
+        .btn.primary:hover {
+            background: #00e6b5;
+            box-shadow: 0 0 20px var(--accent-dim);
+        }
+
+        .btn.danger {
+            border-color: var(--warning);
+            color: var(--warning);
+        }
+
+        .btn.danger:hover {
+            background: var(--warning);
+            color: var(--bg-primary);
+        }
+
+        .btn-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .stats {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .stats h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .stat-item {
+            background: var(--bg-tertiary);
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .selected-point {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .selected-point h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .point-info {
+            background: var(--bg-tertiary);
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .point-index {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.2rem;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+
+        .point-coords {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .coord-input {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .coord-input label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+
+        .coord-input input {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            padding: 8px 10px;
+            border-radius: 4px;
+            width: 100%;
+        }
+
+        .coord-input input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .point-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .point-actions .btn {
+            flex: 1;
+            padding: 8px;
+            font-size: 0.8rem;
+        }
+
+        .no-selection {
+            color: var(--text-secondary);
+            font-style: italic;
+            font-size: 0.9rem;
+        }
+
+        .help {
+            padding: 20px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .help h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .help-item {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 10px;
+            font-size: 0.85rem;
+        }
+
+        .help-key {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-tertiary);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: var(--accent);
+            white-space: nowrap;
+        }
+
+        .help-desc {
+            color: var(--text-secondary);
+        }
+
+        .legend {
+            padding: 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .legend h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .legend-items {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.85rem;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.detected {
+            background: var(--accent);
+            box-shadow: 0 0 8px var(--accent);
+        }
+
+        .legend-dot.undetected {
+            background: var(--undetected);
+        }
+
+        .legend-dot.selected {
+            background: #fff;
+            box-shadow: 0 0 12px #fff;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal h2 {
+            color: var(--accent);
+            margin-bottom: 16px;
+            font-size: 1.2rem;
+        }
+
+        .modal textarea {
+            flex: 1;
+            min-height: 300px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            padding: 12px;
+            border-radius: 8px;
+            resize: none;
+        }
+
+        .modal textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+            justify-content: flex-end;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--accent);
+            color: var(--text-primary);
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1001;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .file-input {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="canvas-container">
+            <canvas id="canvas"></canvas>
+        </div>
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>⚡ Pixelmap Editor</h1>
+                <p>Edit LED position maps</p>
+            </div>
+
+            <div class="controls">
+                <input type="file" id="fileInput" class="file-input" accept=".js">
+                <button class="btn" id="loadBtn">📂 Load Pixelmap</button>
+                <button class="btn primary" id="exportBtn">💾 Export Pixelmap</button>
+                <div class="btn-row">
+                    <button class="btn" id="renormalizeBtn">🔄 Renormalize</button>
+                    <button class="btn danger" id="clearUndetectedBtn">🗑️ Clear Undetected</button>
+                </div>
+            </div>
+
+            <div class="stats">
+                <h3>Statistics</h3>
+                <div class="stat-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="totalPoints">0</div>
+                        <div class="stat-label">Total Points</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="detectedPoints">0</div>
+                        <div class="stat-label">Detected</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="selected-point">
+                <h3>Selected Point</h3>
+                <div id="pointDetails">
+                    <p class="no-selection">Click a point to select</p>
+                </div>
+            </div>
+
+            <div class="help">
+                <h3>Controls</h3>
+                <div class="help-item">
+                    <span class="help-key">Click</span>
+                    <span class="help-desc">Select point</span>
+                </div>
+                <div class="help-item">
+                    <span class="help-key">Drag</span>
+                    <span class="help-desc">Move point</span>
+                </div>
+                <div class="help-item">
+                    <span class="help-key">Double-click</span>
+                    <span class="help-desc">Add new point</span>
+                </div>
+                <div class="help-item">
+                    <span class="help-key">Delete</span>
+                    <span class="help-desc">Mark as undetected</span>
+                </div>
+                <div class="help-item">
+                    <span class="help-key">Shift+Click</span>
+                    <span class="help-desc">Add point after selected</span>
+                </div>
+            </div>
+
+            <div class="legend">
+                <h3>Legend</h3>
+                <div class="legend-items">
+                    <div class="legend-item">
+                        <div class="legend-dot detected"></div>
+                        <span>Detected LED</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot undetected"></div>
+                        <span>Undetected (0.5, 0.5)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot selected"></div>
+                        <span>Selected</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="exportModal">
+        <div class="modal">
+            <h2>Export Pixelmap</h2>
+            <textarea id="exportCode" readonly></textarea>
+            <div class="modal-actions">
+                <button class="btn" id="copyBtn">📋 Copy to Clipboard</button>
+                <button class="btn" id="downloadBtn">⬇️ Download</button>
+                <button class="btn" id="closeExportBtn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // State
+        let points = [];
+        let selectedIndex = -1;
+        let dragging = false;
+        let dragOffset = { x: 0, y: 0 };
+
+        // Canvas setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const PADDING = 40;
+        const POINT_RADIUS = 6;
+        const POINT_RADIUS_SELECTED = 10;
+
+        function resizeCanvas() {
+            const container = document.querySelector('.canvas-container');
+            const size = Math.min(container.clientWidth - 80, container.clientHeight - 80);
+            canvas.width = size;
+            canvas.height = size;
+            render();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Coordinate conversion
+        function normalizedToCanvas(x, y) {
+            return {
+                x: PADDING + x * (canvas.width - 2 * PADDING),
+                y: PADDING + y * (canvas.height - 2 * PADDING)
+            };
+        }
+
+        function canvasToNormalized(cx, cy) {
+            return {
+                x: Math.max(0, Math.min(1, (cx - PADDING) / (canvas.width - 2 * PADDING))),
+                y: Math.max(0, Math.min(1, (cy - PADDING) / (canvas.height - 2 * PADDING)))
+            };
+        }
+
+        // Check if point is "undetected" (at 0.5, 0.5)
+        function isUndetected(point) {
+            return Math.abs(point.x - 0.5) < 0.0001 && Math.abs(point.y - 0.5) < 0.0001;
+        }
+
+        // Render
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw grid
+            ctx.strokeStyle = '#1a1a24';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 10; i++) {
+                const pos = PADDING + (i / 10) * (canvas.width - 2 * PADDING);
+                ctx.beginPath();
+                ctx.moveTo(pos, PADDING);
+                ctx.lineTo(pos, canvas.height - PADDING);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(PADDING, pos);
+                ctx.lineTo(canvas.width - PADDING, pos);
+                ctx.stroke();
+            }
+
+            // Draw border
+            ctx.strokeStyle = '#2a2a3a';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(PADDING, PADDING, canvas.width - 2 * PADDING, canvas.height - 2 * PADDING);
+
+            // Draw axis labels
+            ctx.fillStyle = '#666677';
+            ctx.font = '11px JetBrains Mono, monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('0', PADDING, canvas.height - PADDING + 20);
+            ctx.fillText('1', canvas.width - PADDING, canvas.height - PADDING + 20);
+            ctx.textAlign = 'right';
+            ctx.fillText('0', PADDING - 8, PADDING + 4);
+            ctx.fillText('1', PADDING - 8, canvas.height - PADDING + 4);
+
+            // Draw connecting lines
+            ctx.strokeStyle = '#1a1a24';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i < points.length; i++) {
+                const pos = normalizedToCanvas(points[i].x, points[i].y);
+                if (i === 0) {
+                    ctx.moveTo(pos.x, pos.y);
+                } else {
+                    ctx.lineTo(pos.x, pos.y);
+                }
+            }
+            ctx.stroke();
+
+            // Draw points
+            points.forEach((point, index) => {
+                const pos = normalizedToCanvas(point.x, point.y);
+                const isSelected = index === selectedIndex;
+                const undetected = isUndetected(point);
+
+                // Glow effect for detected points
+                if (!undetected && !isSelected) {
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, POINT_RADIUS + 4, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(0, 255, 200, 0.2)';
+                    ctx.fill();
+                }
+
+                // Point
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, isSelected ? POINT_RADIUS_SELECTED : POINT_RADIUS, 0, Math.PI * 2);
+                
+                if (isSelected) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.shadowColor = '#ffffff';
+                    ctx.shadowBlur = 15;
+                } else if (undetected) {
+                    ctx.fillStyle = '#666677';
+                    ctx.shadowBlur = 0;
+                } else {
+                    ctx.fillStyle = '#00ffc8';
+                    ctx.shadowColor = '#00ffc8';
+                    ctx.shadowBlur = 8;
+                }
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Index label for selected or nearby hover
+                if (isSelected) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 12px JetBrains Mono, monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(index.toString(), pos.x, pos.y - 16);
+                }
+            });
+
+            updateStats();
+        }
+
+        function updateStats() {
+            document.getElementById('totalPoints').textContent = points.length;
+            const detected = points.filter(p => !isUndetected(p)).length;
+            document.getElementById('detectedPoints').textContent = detected;
+        }
+
+        function updateSelectedPointUI() {
+            const container = document.getElementById('pointDetails');
+            
+            if (selectedIndex < 0 || selectedIndex >= points.length) {
+                container.innerHTML = '<p class="no-selection">Click a point to select</p>';
+                return;
+            }
+
+            const point = points[selectedIndex];
+            const undetected = isUndetected(point);
+            
+            container.innerHTML = `
+                <div class="point-info">
+                    <div class="point-index">LED #${selectedIndex}${undetected ? ' (undetected)' : ''}</div>
+                    <div class="point-coords">
+                        <div class="coord-input">
+                            <label>X</label>
+                            <input type="number" id="inputX" value="${point.x.toFixed(4)}" step="0.01" min="0" max="1">
+                        </div>
+                        <div class="coord-input">
+                            <label>Y</label>
+                            <input type="number" id="inputY" value="${point.y.toFixed(4)}" step="0.01" min="0" max="1">
+                        </div>
+                    </div>
+                    <div class="point-actions">
+                        <button class="btn" id="markUndetectedBtn">${undetected ? '✓ Restore' : '✗ Undetect'}</button>
+                        <button class="btn danger" id="deletePointBtn">Delete</button>
+                    </div>
+                </div>
+            `;
+
+            // Attach event listeners
+            document.getElementById('inputX').addEventListener('change', (e) => {
+                points[selectedIndex].x = parseFloat(e.target.value);
+                render();
+            });
+            document.getElementById('inputY').addEventListener('change', (e) => {
+                points[selectedIndex].y = parseFloat(e.target.value);
+                render();
+            });
+            document.getElementById('markUndetectedBtn').addEventListener('click', () => {
+                if (isUndetected(points[selectedIndex])) {
+                    // Restore to a reasonable position
+                    points[selectedIndex] = { x: 0.5, y: 0.4 };
+                } else {
+                    points[selectedIndex] = { x: 0.5, y: 0.5 };
+                }
+                updateSelectedPointUI();
+                render();
+            });
+            document.getElementById('deletePointBtn').addEventListener('click', () => {
+                points.splice(selectedIndex, 1);
+                selectedIndex = -1;
+                updateSelectedPointUI();
+                render();
+                showToast('Point deleted');
+            });
+        }
+
+        // Find point at position
+        function findPointAt(cx, cy) {
+            for (let i = points.length - 1; i >= 0; i--) {
+                const pos = normalizedToCanvas(points[i].x, points[i].y);
+                const dx = cx - pos.x;
+                const dy = cy - pos.y;
+                if (dx * dx + dy * dy < (POINT_RADIUS + 4) * (POINT_RADIUS + 4)) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        // Mouse events
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const cx = e.clientX - rect.left;
+            const cy = e.clientY - rect.top;
+
+            const hitIndex = findPointAt(cx, cy);
+            
+            if (hitIndex >= 0) {
+                selectedIndex = hitIndex;
+                dragging = true;
+                const pos = normalizedToCanvas(points[hitIndex].x, points[hitIndex].y);
+                dragOffset = { x: cx - pos.x, y: cy - pos.y };
+            } else if (e.shiftKey && selectedIndex >= 0) {
+                // Add point after selected
+                const norm = canvasToNormalized(cx, cy);
+                points.splice(selectedIndex + 1, 0, { x: norm.x, y: norm.y });
+                selectedIndex = selectedIndex + 1;
+                showToast(`Added LED #${selectedIndex}`);
+            } else {
+                selectedIndex = -1;
+            }
+            
+            updateSelectedPointUI();
+            render();
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!dragging || selectedIndex < 0) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const cx = e.clientX - rect.left - dragOffset.x;
+            const cy = e.clientY - rect.top - dragOffset.y;
+            
+            const norm = canvasToNormalized(cx, cy);
+            points[selectedIndex].x = norm.x;
+            points[selectedIndex].y = norm.y;
+            
+            updateSelectedPointUI();
+            render();
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            dragging = false;
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            dragging = false;
+        });
+
+        canvas.addEventListener('dblclick', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const cx = e.clientX - rect.left;
+            const cy = e.clientY - rect.top;
+
+            const hitIndex = findPointAt(cx, cy);
+            if (hitIndex >= 0) return; // Don't add if clicking on existing point
+
+            const norm = canvasToNormalized(cx, cy);
+            points.push({ x: norm.x, y: norm.y });
+            selectedIndex = points.length - 1;
+            
+            updateSelectedPointUI();
+            render();
+            showToast(`Added LED #${selectedIndex}`);
+        });
+
+        // Keyboard
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (selectedIndex >= 0 && selectedIndex < points.length) {
+                    // Mark as undetected instead of deleting
+                    points[selectedIndex] = { x: 0.5, y: 0.5 };
+                    updateSelectedPointUI();
+                    render();
+                    showToast(`LED #${selectedIndex} marked as undetected`);
+                }
+            }
+            if (e.key === 'Escape') {
+                selectedIndex = -1;
+                updateSelectedPointUI();
+                render();
+            }
+        });
+
+        // Parse pixelmap file
+        function parsePixelmap(code) {
+            const newPoints = [];
+            const regex = /map\.push\(\[([0-9.]+),\s*([0-9.]+)\]\)/g;
+            let match;
+            
+            while ((match = regex.exec(code)) !== null) {
+                newPoints.push({
+                    x: parseFloat(match[1]),
+                    y: parseFloat(match[2])
+                });
+            }
+            
+            return newPoints;
+        }
+
+        // Generate pixelmap code
+        function generatePixelmap() {
+            const detected = points.filter(p => !isUndetected(p)).length;
+            let code = `// Pixelblaze Pixel Mapper - Edited with Pixelmap Editor\n`;
+            code += `// Detected: ${detected} of ${points.length} LEDs\n`;
+            code += `function (pixelCount) {\n`;
+            code += `  var map = []\n`;
+            
+            points.forEach((point, index) => {
+                const undetected = isUndetected(point);
+                const comment = undetected ? ` // ${index} (not detected)` : ` // ${index}`;
+                code += `  map.push([${point.x.toFixed(4)}, ${point.y.toFixed(4)}])${comment}\n`;
+            });
+            
+            code += `  return map\n`;
+            code += `}\n`;
+            
+            return code;
+        }
+
+        // Renormalize coordinates
+        function renormalize() {
+            const detected = points.filter(p => !isUndetected(p));
+            if (detected.length === 0) {
+                showToast('No detected points to renormalize');
+                return;
+            }
+
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+            
+            detected.forEach(p => {
+                minX = Math.min(minX, p.x);
+                maxX = Math.max(maxX, p.x);
+                minY = Math.min(minY, p.y);
+                maxY = Math.max(maxY, p.y);
+            });
+
+            const rangeX = maxX - minX || 1;
+            const rangeY = maxY - minY || 1;
+
+            points.forEach(p => {
+                if (!isUndetected(p)) {
+                    p.x = (p.x - minX) / rangeX;
+                    p.y = (p.y - minY) / rangeY;
+                }
+            });
+
+            updateSelectedPointUI();
+            render();
+            showToast('Coordinates renormalized to 0-1 range');
+        }
+
+        // Clear undetected points
+        function clearUndetected() {
+            points = points.filter(p => !isUndetected(p));
+            selectedIndex = -1;
+            updateSelectedPointUI();
+            render();
+            showToast('Undetected points removed');
+        }
+
+        // Toast notification
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        // File handling
+        document.getElementById('loadBtn').addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });
+
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const parsed = parsePixelmap(evt.target.result);
+                if (parsed.length > 0) {
+                    points = parsed;
+                    selectedIndex = -1;
+                    updateSelectedPointUI();
+                    render();
+                    showToast(`Loaded ${points.length} points`);
+                } else {
+                    showToast('Could not parse file');
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            const code = generatePixelmap();
+            document.getElementById('exportCode').value = code;
+            document.getElementById('exportModal').classList.add('active');
+        });
+
+        document.getElementById('closeExportBtn').addEventListener('click', () => {
+            document.getElementById('exportModal').classList.remove('active');
+        });
+
+        document.getElementById('copyBtn').addEventListener('click', () => {
+            navigator.clipboard.writeText(document.getElementById('exportCode').value);
+            showToast('Copied to clipboard');
+        });
+
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            const code = document.getElementById('exportCode').value;
+            const blob = new Blob([code], { type: 'text/javascript' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `pixelmap_${Date.now()}.js`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Downloaded');
+        });
+
+        document.getElementById('renormalizeBtn').addEventListener('click', renormalize);
+        document.getElementById('clearUndetectedBtn').addEventListener('click', clearUndetected);
+
+        // Close modal on backdrop click
+        document.getElementById('exportModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                e.currentTarget.classList.remove('active');
+            }
+        });
+
+        // Initialize with sample data
+        points = [
+            { x: 0.1, y: 0.1 },
+            { x: 0.3, y: 0.2 },
+            { x: 0.5, y: 0.5 }, // undetected
+            { x: 0.6, y: 0.4 },
+            { x: 0.8, y: 0.7 },
+            { x: 0.9, y: 0.9 }
+        ];
+        render();
+
+        // Drag and drop file support
+        canvas.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            canvas.style.borderColor = '#00ffc8';
+        });
+
+        canvas.addEventListener('dragleave', () => {
+            canvas.style.borderColor = '#2a2a3a';
+        });
+
+        canvas.addEventListener('drop', (e) => {
+            e.preventDefault();
+            canvas.style.borderColor = '#2a2a3a';
+            
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.endsWith('.js')) {
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    const parsed = parsePixelmap(evt.target.result);
+                    if (parsed.length > 0) {
+                        points = parsed;
+                        selectedIndex = -1;
+                        updateSelectedPointUI();
+                        render();
+                        showToast(`Loaded ${points.length} points`);
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+    </script>
+</body>
+</html>
+
