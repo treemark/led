@@ -1,5 +1,4 @@
-// Moon phase animation v3 for Pixelblaze
-// Two-circle crescent with exaggeration, new-moon ring, and smooth transition
+// Moon phase animation library for Pixelblaze (curve-based approach with directional smoothstep)
 
 export var moonPhase = 0
 export var moonPhaseFull = 0
@@ -16,13 +15,12 @@ var TERMINATOR_SMOOTHNESS = 0.15
 var EXAGGERATION = 1.4
 var INV_EXAGGERATION = 1 / 1.4
 
-// New-moon ring settings
-var RING_INNER = 0.36
-var RING_SMOOTHNESS = 0.08
-var RING_DIM = 0.15
+// Max gap at new moon: terminator circle shrinks by this much
+// creating a natural thin ring from the crescent geometry
+var MAX_GAP = 0.005
 
-// Transition zone: crescent fades out over this phase range near new moon
-var TRANSITION_ZONE = 0.12
+// Crossfade zone near new moon to smooth the left-right flip
+var FADE_ZONE = 0.08
 
 var width = 16;
 var altPixelMap = array(pixelCount)
@@ -36,10 +34,7 @@ var gR = 0
 var gSignDir = 1
 var gUseCircle = 0
 var gWaning = 0
-
-// Transition blend factors, computed once per frame
 var gCrescentFade = 1
-var gRingFade = 0
 
 function initPixelMap(pixelCount) {
     for (i = 0; i < pixelCount; i++) {
@@ -55,7 +50,6 @@ export function beforeRender(delta) {
     moonPhaseFull = (moonPhaseFull + phaseSpeed) % 2
     moonPhase = moonPhaseFull % 1
     precomputeTerminator()
-    precomputeTransition()
     updateMoonPixels()
 }
 
@@ -63,9 +57,29 @@ function precomputeTerminator() {
     var phase01 = moonPhase
     var exaggeratedPhase = clamp(pow(phase01, INV_EXAGGERATION), 0, 1)
 
-    gMx = 0.5 * cos(PI * exaggeratedPhase)
+    // Distance from new moon: 0 at new, 1 at full
+    var distFromNew = min(moonPhaseFull, 2 - moonPhaseFull)
+
+    // Gap grows as we approach new moon
+    var newMoonProx = 1 - clamp(distFromNew / 0.2, 0, 1)
+    var gap = MAX_GAP * newMoonProx
+
+    // Crossfade to smooth the waning-to-waxing directional flip
+    var fadeT = clamp(distFromNew / FADE_ZONE, 0, 1)
+    gCrescentFade = fadeT * fadeT * (3 - 2 * fadeT)
+
+    // Edge of terminator circle: shrunk by gap near new moon
+    var edge = 0.5 - gap
+
+    // mx: +edge at new moon, 0 at half, -0.5 at full
+    gMx = edge * cos(PI * exaggeratedPhase)
+
+    // Cap mx so terminator never exceeds the shrunk edge
+    gMx = min(gMx, edge)
+
     gWaning = moonPhaseFull >= 1
 
+    // Circle through 3 points: (0, -edge), (mx, 0), (0, edge)
     var absMx = abs(gMx)
     gUseCircle = absMx > 0.01
 
@@ -73,23 +87,10 @@ function precomputeTerminator() {
     gR = 0
     gSignDir = 1
     if (gUseCircle) {
-        gCx = (gMx * gMx - 0.25) / (2 * gMx)
+        gCx = (gMx * gMx - edge * edge) / (2 * gMx)
         gR = abs(gMx - gCx)
         gSignDir = gMx > gCx ? 1 : -1
     }
-}
-
-function precomputeTransition() {
-    // Distance from new moon: 0 at new moon, 1 at full moon
-    var distFromNew = min(moonPhaseFull, 2 - moonPhaseFull)
-
-    // Crescent fades out smoothly near new moon
-    gCrescentFade = clamp(distFromNew / TRANSITION_ZONE, 0, 1)
-    // Smooth the fade with ease curve
-    gCrescentFade = gCrescentFade * gCrescentFade * (3 - 2 * gCrescentFade)
-
-    // Ring fades in as crescent fades out
-    gRingFade = 1 - gCrescentFade
 }
 
 function updateMoonPixels() {
@@ -108,30 +109,34 @@ function calculateMoonBrightness(dx, dy) {
     var dist = sqrt(dx * dx + dy * dy)
     var moonEdge = smoothstepDown(dist, 0.5, EDGE_SMOOTHNESS)
 
-    // Crescent brightness from terminator
-    var crescent = calculateTerminator(dx, dy) * gCrescentFade
+    var terminator = calculateTerminator(dx, dy)
 
-    // Ring: lit annulus near moon edge, only visible near new moon
-    var ringInner = smoothstepUp(dist, RING_INNER, RING_SMOOTHNESS)
-    var ring = moonEdge * ringInner * gRingFade * RING_DIM
-
-    // Combine: crescent dominates when visible, ring shows at new moon
-    var combined = crescent * moonEdge + ring
-    return min(combined, 1)
+    return moonEdge * terminator
 }
 
 function calculateTerminator(dx, dy) {
+    // Near half moon, circle is too large; use vertical line
     if (gUseCircle == 0) {
-        return gWaning ? smoothstepDown(dx, gMx, TERMINATOR_SMOOTHNESS) : smoothstepUp(dx, gMx, TERMINATOR_SMOOTHNESS)
+        var halfResult = gWaning ? smoothstepDown(dx, gMx, TERMINATOR_SMOOTHNESS) : smoothstepUp(dx, gMx, TERMINATOR_SMOOTHNESS)
+        return halfResult
     }
+
+    // Radial ring: lit when outside the terminator circle (non-directional)
+    var ddx = dx - gCx
+    var distToC2 = sqrt(ddx * ddx + dy * dy)
+    var radial = smoothstepUp(distToC2, gR, TERMINATOR_SMOOTHNESS)
 
     var underSqrt = gR * gR - dy * dy
     if (underSqrt < 0) {
-        return gWaning ? (dx < gCx ? 1 : 0) : (dx > gCx ? 1 : 0)
+        // Polar caps: outside terminator arc, part of ring
+        return 1
     }
 
     var xTerm = gCx + gSignDir * sqrt(underSqrt)
-    return gWaning ? smoothstepDown(dx, xTerm, TERMINATOR_SMOOTHNESS) : smoothstepUp(dx, xTerm, TERMINATOR_SMOOTHNESS)
+    var directional = gWaning ? smoothstepDown(dx, xTerm, TERMINATOR_SMOOTHNESS) : smoothstepUp(dx, xTerm, TERMINATOR_SMOOTHNESS)
+
+    // Blend: directional crescent far from new moon, radial ring near new moon
+    return directional * gCrescentFade + radial * (1 - gCrescentFade)
 }
 
 export function render2D(index, x, y) {
