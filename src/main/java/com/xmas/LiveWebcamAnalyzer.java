@@ -12,6 +12,7 @@ import org.opencv.videoio.VideoCapture;
 import org.opencv.videoio.Videoio;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -66,6 +67,11 @@ public class LiveWebcamAnalyzer implements CommandLineRunner {
     
     // Adjustable brightness threshold (V in HSV)
     private volatile int brightnessThreshold = 100;
+    
+    // Webcam exposure control
+    @Value("${webcam.exposure:-6}")
+    private volatile int webcamExposure;
+    private volatile VideoCapture activeCapture;
 
     @Override
     public void run(String... args) throws Exception {
@@ -102,6 +108,16 @@ public class LiveWebcamAnalyzer implements CommandLineRunner {
         // Set resolution if possible
         capture.set(Videoio.CAP_PROP_FRAME_WIDTH, 1280);
         capture.set(Videoio.CAP_PROP_FRAME_HEIGHT, 720);
+        
+        // Set webcam exposure (lower = darker, reduces overexposure for LED detection)
+        if (webcamExposure != 0) {
+            capture.set(Videoio.CAP_PROP_AUTO_EXPOSURE, 1); // 1 = manual mode
+            capture.set(Videoio.CAP_PROP_EXPOSURE, webcamExposure);
+        }
+        double actualExposure = capture.get(Videoio.CAP_PROP_EXPOSURE);
+        double autoExposure = capture.get(Videoio.CAP_PROP_AUTO_EXPOSURE);
+        logger.info("Webcam exposure set to {} (actual: {}, auto-exposure: {})", webcamExposure, actualExposure, autoExposure);
+        activeCapture = capture;
 
         int width = (int) capture.get(Videoio.CAP_PROP_FRAME_WIDTH);
         int height = (int) capture.get(Videoio.CAP_PROP_FRAME_HEIGHT);
@@ -154,6 +170,12 @@ public class LiveWebcamAnalyzer implements CommandLineRunner {
                         brightnessThreshold = Math.max(0, brightnessThreshold - 10);
                         updateThresholds();
                         break;
+                    case KeyEvent.VK_OPEN_BRACKET:
+                        adjustExposure(-1);
+                        break;
+                    case KeyEvent.VK_CLOSE_BRACKET:
+                        adjustExposure(1);
+                        break;
                 }
             }
         });
@@ -202,6 +224,16 @@ public class LiveWebcamAnalyzer implements CommandLineRunner {
         frame.dispose();
         
         logger.info("Webcam capture ended");
+    }
+
+    private void adjustExposure(int delta) {
+        webcamExposure = Math.max(-13, Math.min(0, webcamExposure + delta));
+        if (activeCapture != null) {
+            activeCapture.set(Videoio.CAP_PROP_AUTO_EXPOSURE, 1); // manual mode
+            activeCapture.set(Videoio.CAP_PROP_EXPOSURE, webcamExposure);
+            double actual = activeCapture.get(Videoio.CAP_PROP_EXPOSURE);
+            logger.info("Webcam exposure: {} (actual: {})", webcamExposure, actual);
+        }
     }
 
     private void updateThresholds() {
@@ -300,8 +332,8 @@ public class LiveWebcamAnalyzer implements CommandLineRunner {
         int lineHeight = 25;
         
         // Background
-        Imgproc.rectangle(display, new Point(10, 10), new Point(350, 150), new Scalar(0, 0, 0), -1);
-        Imgproc.rectangle(display, new Point(10, 10), new Point(350, 150), new Scalar(255, 255, 255), 1);
+        Imgproc.rectangle(display, new Point(10, 10), new Point(380, 185), new Scalar(0, 0, 0), -1);
+        Imgproc.rectangle(display, new Point(10, 10), new Point(380, 185), new Scalar(255, 255, 255), 1);
 
         Imgproc.putText(display, "LED DETECTOR - LIVE", new Point(20, y),
                 Imgproc.FONT_HERSHEY_SIMPLEX, 0.6, new Scalar(255, 255, 255), 2);
@@ -315,7 +347,11 @@ public class LiveWebcamAnalyzer implements CommandLineRunner {
                 new Point(20, y), Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(200, 200, 200), 1);
         y += lineHeight;
 
-        Imgproc.putText(display, "Q=Quit B=Blue R=Red M=Masks +/-=Brightness",
+        Imgproc.putText(display, String.format("Webcam exposure: %d  [/]=adjust", webcamExposure),
+                new Point(20, y), Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(200, 200, 100), 1);
+        y += lineHeight;
+
+        Imgproc.putText(display, "Q=Quit B=Blue R=Red M=Masks +/-=Bright [/]=Exp",
                 new Point(20, y), Imgproc.FONT_HERSHEY_SIMPLEX, 0.4, new Scalar(150, 150, 150), 1);
         y += lineHeight;
         

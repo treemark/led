@@ -6,6 +6,7 @@ import org.opencv.videoio.VideoCapture;
 import org.opencv.videoio.Videoio;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -38,6 +39,9 @@ public class LedTuningSession implements CommandLineRunner {
     private volatile Point clickedPoint = null;
     private volatile boolean ledOn = true;
     
+    @Value("${webcam.exposure:-6}")
+    private int webcamExposure;
+
     // Pixelblaze connection
     private Process pixelblazeProcess;
     private PrintWriter pixelblazeWriter;
@@ -84,6 +88,14 @@ public class LedTuningSession implements CommandLineRunner {
 
         capture.set(Videoio.CAP_PROP_FRAME_WIDTH, 1280);
         capture.set(Videoio.CAP_PROP_FRAME_HEIGHT, 720);
+        
+        // Set webcam exposure (lower = darker, reduces overexposure for LED detection)
+        if (webcamExposure != 0) {
+            capture.set(Videoio.CAP_PROP_AUTO_EXPOSURE, 1); // 1 = manual mode
+            capture.set(Videoio.CAP_PROP_EXPOSURE, webcamExposure);
+        }
+        double actualExposure = capture.get(Videoio.CAP_PROP_EXPOSURE);
+        logger.info("Webcam exposure set to {} (actual: {})", webcamExposure, actualExposure);
 
         int width = (int) capture.get(Videoio.CAP_PROP_FRAME_WIDTH);
         int height = (int) capture.get(Videoio.CAP_PROP_FRAME_HEIGHT);

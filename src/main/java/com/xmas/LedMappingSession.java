@@ -60,6 +60,9 @@ public class LedMappingSession implements CommandLineRunner {
     @Value("${pixelblaze.brightness:50}")
     private int defaultBrightness;
     
+    @Value("${webcam.exposure:-6}")
+    private int webcamExposure;
+    
     // Brightness stepping - configurable start, increase until we see the LED
     private int brightnessStart;
     private static final int BRIGHTNESS_MAX = 100;
@@ -86,6 +89,7 @@ public class LedMappingSession implements CommandLineRunner {
     private static final double MAX_LED_DISTANCE = 50.0;
 
     private PixelblazeController pixelblazeController;
+    private volatile VideoCapture activeCapture;  // For live exposure adjustment
 
     @Override
     public void run(String... args) throws Exception {
@@ -139,6 +143,16 @@ public class LedMappingSession implements CommandLineRunner {
 
         capture.set(Videoio.CAP_PROP_FRAME_WIDTH, 1280);
         capture.set(Videoio.CAP_PROP_FRAME_HEIGHT, 720);
+        
+        // Set webcam exposure (lower = darker, reduces overexposure for LED detection)
+        if (webcamExposure != 0) {
+            capture.set(Videoio.CAP_PROP_AUTO_EXPOSURE, 1); // 1 = manual mode
+            capture.set(Videoio.CAP_PROP_EXPOSURE, webcamExposure);
+        }
+        double actualExposure = capture.get(Videoio.CAP_PROP_EXPOSURE);
+        double autoExposure = capture.get(Videoio.CAP_PROP_AUTO_EXPOSURE);
+        logger.info("Webcam exposure set to {} (actual: {}, auto-exposure: {})", webcamExposure, actualExposure, autoExposure);
+        activeCapture = capture;
 
         int width = (int) capture.get(Videoio.CAP_PROP_FRAME_WIDTH);
         int height = (int) capture.get(Videoio.CAP_PROP_FRAME_HEIGHT);
@@ -168,6 +182,8 @@ public class LedMappingSession implements CommandLineRunner {
                     case KeyEvent.VK_S -> savePositions();
                     case KeyEvent.VK_R -> resetMapping();
                     case KeyEvent.VK_D -> saveDebugFrame = true;  // Save next frame for analysis
+                    case KeyEvent.VK_OPEN_BRACKET -> adjustExposure(-1);   // [ = decrease exposure
+                    case KeyEvent.VK_CLOSE_BRACKET -> adjustExposure(1);   // ] = increase exposure
                 }
             }
         });
@@ -577,8 +593,8 @@ public class LedMappingSession implements CommandLineRunner {
 
     private void drawOverlay(Mat display) {
         int y = 30;
-        Imgproc.rectangle(display, new Point(10, 10), new Point(400, 140), new Scalar(0, 0, 0), -1);
-        Imgproc.rectangle(display, new Point(10, 10), new Point(400, 140), new Scalar(255, 255, 255), 1);
+        Imgproc.rectangle(display, new Point(10, 10), new Point(420, 175), new Scalar(0, 0, 0), -1);
+        Imgproc.rectangle(display, new Point(10, 10), new Point(420, 175), new Scalar(255, 255, 255), 1);
 
         String statusText = mappingActive ? "MAPPING" : "READY";
         Scalar statusColor = mappingActive ? new Scalar(0, 255, 0) : new Scalar(200, 200, 200);
@@ -596,12 +612,26 @@ public class LedMappingSession implements CommandLineRunner {
                 Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(200, 200, 200), 1);
         y += 20;
 
+        Imgproc.putText(display, String.format("Webcam exposure: %d  [/]=adjust", webcamExposure), new Point(20, y),
+                Imgproc.FONT_HERSHEY_SIMPLEX, 0.4, new Scalar(200, 200, 100), 1);
+        y += 18;
+
         Imgproc.putText(display, String.format("State: %s", state), new Point(20, y),
                 Imgproc.FONT_HERSHEY_SIMPLEX, 0.4, new Scalar(150, 150, 150), 1);
         y += 18;
 
-        Imgproc.putText(display, "SPACE=Start  S=Save  R=Reset  Q=Quit", new Point(20, y),
+        Imgproc.putText(display, "SPACE=Start S=Save R=Reset [/]=Exp Q=Quit", new Point(20, y),
                 Imgproc.FONT_HERSHEY_SIMPLEX, 0.4, new Scalar(150, 150, 150), 1);
+    }
+
+    private void adjustExposure(int delta) {
+        webcamExposure = Math.max(-13, Math.min(0, webcamExposure + delta));
+        if (activeCapture != null) {
+            activeCapture.set(Videoio.CAP_PROP_AUTO_EXPOSURE, 1); // manual mode
+            activeCapture.set(Videoio.CAP_PROP_EXPOSURE, webcamExposure);
+            double actual = activeCapture.get(Videoio.CAP_PROP_EXPOSURE);
+            logger.info("Webcam exposure: {} (actual: {})", webcamExposure, actual);
+        }
     }
 
     private void toggleMapping() {
