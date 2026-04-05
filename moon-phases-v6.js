@@ -10,8 +10,8 @@ export function render(index) {
 }
 
 // Moon phase animation v6 for Pixelblaze
+// New: real moon phase from date/time, periodic full-cycle animation
 // New: minimum brightness for dark/shadow pixels on the moon disc
-// Fix: full moon crossfade hides the terminator direction flip
 // Two-circle crescent with exaggeration, natural ring at new moon,
 // and global brightness limiting to prevent voltage drop
 
@@ -19,7 +19,6 @@ export var moonPhase = 0
 export var moonPhaseFull = 0
 export var debug = 0
 
-var phaseSpeed = 0.01
 var resolution = 32
 var resolutionMinusOne = resolution - 1
 
@@ -40,20 +39,27 @@ var FADE_ZONE = 0.08
 var FULL_FADE_ZONE = 0.05
 
 // Minimum brightness for dark/shadow pixels on the moon disc.
-// 0 = fully dark shadows (original behavior), 1 = no shadows at all.
-// Try values like 0.05–0.15 for a subtle lunar glow in the shadow region.
-var MIN_BRIGHTNESS = 0.01
+// 0 = fully dark shadows, 1 = no shadows at all.
+// Try 0.05-0.15 for a subtle lunar glow in the shadow region.
+var MIN_BRIGHTNESS = 0.08
 
 // Max total brightness across all pixels (virtual 32x32 grid sum).
-// A full moon sums to ~800 on the virtual grid.
-// Physical LEDs are roughly 1/4 of virtual pixels.
-// Lower this value if you see voltage drop / flickering.
 var MAX_TOTAL_BRIGHTNESS = 250
 
-var width = 64;
+// --- Real moon phase settings ---
+// Synodic month (new moon to new moon) in days
+var SYNODIC_PERIOD = 29.53059
+
+// How often to run the full-cycle animation (seconds)
+var CYCLE_INTERVAL = 120
+
+// How long the animation takes (seconds)
+var ANIMATION_DURATION = 15
+
+var width = 64
 var altPixelMap = array(pixelCount)
 var moonPixels = array(resolution * resolution)
-export var what = 0;
+export var what = 0
 
 // Terminator circle params, computed once per frame
 var gMx = 0
@@ -69,18 +75,100 @@ var gFullMoonFade = 1
 var gDimFactor = 1
 var gTotalBrightness = 0
 
+// Animation state
+var realMoonPhaseFull = 0
+var animating = 0
+var animTimer = 0
+var cycleTimer = 0
+
 function initPixelMap(pixelCount) {
     for (i = 0; i < pixelCount; i++) {
         y = floor(i / width)
         x = i % width
         x = y % 2 == 1 ? width - 1 - x : x
-        altPixelMap[i] = [x, y];
+        altPixelMap[i] = [x, y]
     }
 }
 initPixelMap(pixelCount)
 
+// Compute days since the reference new moon (Jan 6, 2000 18:14 UTC).
+// Uses Pixelblaze clock functions. Accurate for years 2000-2099.
+function daysSinceRefNewMoon() {
+    var yr = clockYear() - 2000
+    // Leap days for complete years since 2000 (works for 2000-2099)
+    var leapDays = floor((yr + 3) / 4)
+    var days = yr * 365 + leapDays
+
+    // Cumulative days before current month (non-leap year)
+    var m = clockMonth()
+    var md = 0
+    if (m == 2) md = 31
+    if (m == 3) md = 59
+    if (m == 4) md = 90
+    if (m == 5) md = 120
+    if (m == 6) md = 151
+    if (m == 7) md = 181
+    if (m == 8) md = 212
+    if (m == 9) md = 243
+    if (m == 10) md = 273
+    if (m == 11) md = 304
+    if (m == 12) md = 334
+
+    // Extra day if leap year and past February
+    var isLeap = (clockYear() % 4 == 0)
+    if (isLeap && m > 2) md += 1
+
+    days += md + clockDay()
+
+    // Subtract reference date (Jan 6 = day 6 of year 2000)
+    days -= 6
+
+    // Add fractional day for current time, subtract 0.76 for 18:14 UTC ref time
+    days += clockHour() / 24 + clockMinute() / 1440 + clockSecond() / 86400 - 0.76
+
+    return days
+}
+
+function calculateRealMoonPhase() {
+    var days = daysSinceRefNewMoon()
+    var cycles = days / SYNODIC_PERIOD
+    // phase01: 0 = new moon, 0.5 = full moon, 1.0 = next new moon
+    var phase01 = cycles - floor(cycles)
+    if (phase01 < 0) phase01 += 1
+    // Map to moonPhaseFull range [0, 2): 0=new, 1=full, 2=new
+    realMoonPhaseFull = phase01 * 2
+}
+
 export function beforeRender(delta) {
-    moonPhaseFull = (moonPhaseFull + phaseSpeed) % 2
+    var deltaSec = delta / 1000
+
+    calculateRealMoonPhase()
+
+    if (animating) {
+        animTimer += deltaSec
+        if (animTimer >= ANIMATION_DURATION) {
+            // Animation complete, snap back to real phase
+            animating = 0
+            animTimer = 0
+            cycleTimer = 0
+            moonPhaseFull = realMoonPhaseFull
+        } else {
+            // Sweep through full cycle starting and ending at real phase
+            var progress = animTimer / ANIMATION_DURATION
+            // Smooth ease-in-out
+            var eased = progress * progress * (3 - 2 * progress)
+            moonPhaseFull = (realMoonPhaseFull + eased * 2) % 2
+        }
+    } else {
+        // Static: show real moon phase
+        moonPhaseFull = realMoonPhaseFull
+        cycleTimer += deltaSec
+        if (cycleTimer >= CYCLE_INTERVAL) {
+            animating = 1
+            animTimer = 0
+        }
+    }
+
     moonPhase = moonPhaseFull % 1
     precomputeTerminator()
     updateMoonPixels()
@@ -101,9 +189,7 @@ function precomputeTerminator() {
     var fadeT = clamp(distFromNew / FADE_ZONE, 0, 1)
     gCrescentFade = fadeT * fadeT * (3 - 2 * fadeT)
 
-    // FIX: Crossfade near full moon to hide the terminator direction flip.
-    // At full moon, the terminator jumps from far-left to far-right, but
-    // blending toward 1.0 (fully lit) makes this invisible.
+    // Crossfade near full moon to hide the terminator direction flip
     var distFromFull = abs(moonPhaseFull - 1)
     var fullFadeT = clamp(distFromFull / FULL_FADE_ZONE, 0, 1)
     gFullMoonFade = fullFadeT * fullFadeT * (3 - 2 * fullFadeT)
@@ -113,8 +199,6 @@ function precomputeTerminator() {
 
     // mx: +edge at new moon, 0 at half, -edge at full
     gMx = edge * cos(PI * exaggeratedPhase)
-
-    // Cap mx so terminator never exceeds the shrunk edge
     gMx = min(gMx, edge)
 
     gWaning = moonPhaseFull >= 1
@@ -146,7 +230,6 @@ function updateMoonPixels() {
         }
     }
 
-    // Compute global dimming factor
     if (gTotalBrightness > MAX_TOTAL_BRIGHTNESS) {
         gDimFactor = MAX_TOTAL_BRIGHTNESS / gTotalBrightness
     } else {
@@ -168,37 +251,31 @@ function calculateMoonBrightness(dx, dy) {
 }
 
 function calculateTerminator(dx, dy) {
-    // Near half moon, circle is too large; use vertical line
     if (gUseCircle == 0) {
         var halfResult = gWaning ? smoothstepDown(dx, gMx, TERMINATOR_SMOOTHNESS) : smoothstepUp(dx, gMx, TERMINATOR_SMOOTHNESS)
         return halfResult * gFullMoonFade + (1 - gFullMoonFade)
     }
 
-    // Radial ring: lit when outside the terminator circle (non-directional)
     var ddx = dx - gCx
     var distToC2 = sqrt(ddx * ddx + dy * dy)
     var radial = smoothstepUp(distToC2, gR, TERMINATOR_SMOOTHNESS)
 
     var underSqrt = gR * gR - dy * dy
     if (underSqrt < 0) {
-        // Polar caps: outside terminator arc, part of ring
         return 1
     }
 
     var xTerm = gCx + gSignDir * sqrt(underSqrt)
     var directional = gWaning ? smoothstepDown(dx, xTerm, TERMINATOR_SMOOTHNESS) : smoothstepUp(dx, xTerm, TERMINATOR_SMOOTHNESS)
 
-    // Blend: directional crescent far from new moon, radial ring near new moon
     var result = directional * gCrescentFade + radial * (1 - gCrescentFade)
 
-    // FIX: Near full moon, blend toward fully lit (1.0) to hide the terminator flip
-    // gFullMoonFade is 0 at full moon, 1 away from full moon
     return result * gFullMoonFade + (1 - gFullMoonFade)
 }
 
 export function render2D(index, x, y) {
-    var altx = altPixelMap[floor(index)][0];
-    var alty = altPixelMap[floor(index)][1];
+    var altx = altPixelMap[floor(index)][0]
+    var alty = altPixelMap[floor(index)][1]
 
     var pixelX = floor(x * resolution)
     var pixelY = floor(y * resolution)
