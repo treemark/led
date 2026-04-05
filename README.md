@@ -127,3 +127,9 @@ src/
 ## OpenCV Version
 
 This project uses OpenCV 4.9.0 via the OpenPnP packaging.
+
+## Development Notes
+
+### Cline / AI Assistant: `write_to_file` Limitation
+
+When using Cline's `write_to_file` tool, writing large files in a single call can fail with an empty `content` parameter error. This happens when the file content exceeds output token limits. **Workaround:** copy an existing file first (e.g., via `cp`), then use `replace_in_file` to make targeted edits instead of rewriting the entire file at once.
