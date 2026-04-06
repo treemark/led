@@ -41,7 +41,7 @@ var FULL_FADE_ZONE = 0.05
 // Minimum brightness for dark/shadow pixels on the moon disc.
 // 0 = fully dark shadows, 1 = no shadows at all.
 // Try 0.05-0.15 for a subtle lunar glow in the shadow region.
-var MIN_BRIGHTNESS = 0.08
+var MIN_BRIGHTNESS = 0.01
 
 // Max total brightness across all pixels (virtual 32x32 grid sum).
 var MAX_TOTAL_BRIGHTNESS = 250
