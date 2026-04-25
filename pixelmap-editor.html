@@ -448,6 +448,28 @@
                 </div>
             </div>
 
+            <div class="controls" style="padding-top: 8px;">
+                <h3 style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); margin-bottom: 4px;">Rotate About Center</h3>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="range" id="rotationSlider" min="-180" max="180" value="0" step="1"
+                        style="flex: 1; accent-color: var(--accent); cursor: pointer;">
+                    <div class="coord-input" style="width: 70px;">
+                        <input type="number" id="rotationInput" value="0" step="1" min="-360" max="360"
+                            style="background: var(--bg-primary); border: 1px solid var(--border); color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; padding: 6px 8px; border-radius: 4px; width: 100%; text-align: right;">
+                    </div>
+                    <span style="color: var(--text-secondary); font-size: 0.85rem;">°</span>
+                </div>
+                <div class="btn-row">
+                    <button class="btn" id="applyRotationBtn">↻ Apply Rotation</button>
+                    <button class="btn" id="resetRotationBtn">↺ Reset Preview</button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+                    <input type="checkbox" id="livePreviewCheck" checked
+                        style="accent-color: var(--accent); cursor: pointer;">
+                    <label for="livePreviewCheck" style="font-size: 0.8rem; color: var(--text-secondary); cursor: pointer;">Live preview while dragging</label>
+                </div>
+            </div>
+
             <div class="stats">
                 <h3>Statistics</h3>
                 <div class="stat-grid">
@@ -1018,6 +1040,129 @@
                 reader.readAsText(file);
             }
         });
+
+        // ============================================================
+        // Rotation about center
+        // ============================================================
+
+        // Snapshot of points before a rotation preview begins
+        let rotationSnapshot = null;
+
+        // Take a deep copy of the current points as the rotation baseline
+        function takeRotationSnapshot() {
+            rotationSnapshot = points.map(p => ({ x: p.x, y: p.y }));
+        }
+
+        // Rotate a single point (px, py) about center (cx, cy) by angleDeg degrees
+        function rotatePoint(px, py, cx, cy, angleDeg) {
+            const rad = angleDeg * Math.PI / 180;
+            const cosA = Math.cos(rad);
+            const sinA = Math.sin(rad);
+            const dx = px - cx;
+            const dy = py - cy;
+            return {
+                x: cx + dx * cosA - dy * sinA,
+                y: cy + dx * sinA + dy * cosA
+            };
+        }
+
+        // Apply a rotation preview: rotate snapshot points by angleDeg, write into `points`
+        function applyRotationPreview(angleDeg) {
+            if (!rotationSnapshot) takeRotationSnapshot();
+
+            const cx = 0.5, cy = 0.5; // center of the normalized coordinate space
+
+            for (let i = 0; i < points.length; i++) {
+                const src = rotationSnapshot[i];
+                // Skip undetected points (they sit at the center and rotation is a no-op anyway)
+                if (Math.abs(src.x - 0.5) < 0.0001 && Math.abs(src.y - 0.5) < 0.0001) {
+                    points[i].x = src.x;
+                    points[i].y = src.y;
+                    continue;
+                }
+                const rotated = rotatePoint(src.x, src.y, cx, cy, angleDeg);
+                points[i].x = rotated.x;
+                points[i].y = rotated.y;
+            }
+
+            updateSelectedPointUI();
+            render();
+        }
+
+        // Commit the current rotation permanently (snapshot becomes the new baseline)
+        function commitRotation() {
+            const angle = parseFloat(document.getElementById('rotationSlider').value) || 0;
+            if (angle === 0 && !rotationSnapshot) {
+                showToast('No rotation to apply');
+                return;
+            }
+
+            // Ensure preview is applied
+            if (rotationSnapshot) {
+                applyRotationPreview(angle);
+            }
+
+            // Clear snapshot — current `points` are now the canonical positions
+            rotationSnapshot = null;
+
+            // Reset slider and input to 0
+            document.getElementById('rotationSlider').value = 0;
+            document.getElementById('rotationInput').value = 0;
+
+            showToast(`Rotated ${angle}° about center`);
+        }
+
+        // Reset preview back to snapshot (undo uncommitted rotation)
+        function resetRotationPreview() {
+            if (!rotationSnapshot) {
+                showToast('No preview to reset');
+                return;
+            }
+
+            for (let i = 0; i < points.length; i++) {
+                points[i].x = rotationSnapshot[i].x;
+                points[i].y = rotationSnapshot[i].y;
+            }
+
+            rotationSnapshot = null;
+
+            document.getElementById('rotationSlider').value = 0;
+            document.getElementById('rotationInput').value = 0;
+
+            updateSelectedPointUI();
+            render();
+            showToast('Rotation preview reset');
+        }
+
+        // --- Wire up rotation UI ---
+
+        const rotationSlider = document.getElementById('rotationSlider');
+        const rotationInput = document.getElementById('rotationInput');
+        const livePreviewCheck = document.getElementById('livePreviewCheck');
+
+        // Keep slider and numeric input in sync
+        rotationSlider.addEventListener('input', () => {
+            const angle = parseInt(rotationSlider.value, 10);
+            rotationInput.value = angle;
+            if (livePreviewCheck.checked) {
+                if (!rotationSnapshot) takeRotationSnapshot();
+                applyRotationPreview(angle);
+            }
+        });
+
+        rotationInput.addEventListener('input', () => {
+            let angle = parseInt(rotationInput.value, 10);
+            if (isNaN(angle)) return;
+            // Clamp slider range but allow wider input
+            rotationSlider.value = Math.max(-180, Math.min(180, angle));
+            if (livePreviewCheck.checked) {
+                if (!rotationSnapshot) takeRotationSnapshot();
+                applyRotationPreview(angle);
+            }
+        });
+
+        document.getElementById('applyRotationBtn').addEventListener('click', commitRotation);
+        document.getElementById('resetRotationBtn').addEventListener('click', resetRotationPreview);
     </script>
 </body>
 </html>
