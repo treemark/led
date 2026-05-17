@@ -446,6 +446,10 @@
                     <button class="btn" id="renormalizeBtn">🔄 Renormalize</button>
                     <button class="btn danger" id="clearUndetectedBtn">🗑️ Clear Undetected</button>
                 </div>
+                <div class="btn-row">
+                    <button class="btn" id="flipHorizontalBtn">↔️ Flip Horizontal</button>
+                    <button class="btn" id="flipVerticalBtn">↕️ Flip Vertical</button>
+                </div>
             </div>
 
             <div class="controls" style="padding-top: 8px;">
@@ -928,6 +932,30 @@
             showToast('Undetected points removed');
         }
 
+        // Flip horizontally (mirror across vertical axis)
+        function flipHorizontal() {
+            points.forEach(p => {
+                if (!isUndetected(p)) {
+                    p.x = 1.0 - p.x;
+                }
+            });
+            updateSelectedPointUI();
+            render();
+            showToast('Flipped horizontally');
+        }
+
+        // Flip vertically (mirror across horizontal axis)
+        function flipVertical() {
+            points.forEach(p => {
+                if (!isUndetected(p)) {
+                    p.y = 1.0 - p.y;
+                }
+            });
+            updateSelectedPointUI();
+            render();
+            showToast('Flipped vertically');
+        }
+
         // Toast notification
         function showToast(message) {
             const toast = document.getElementById('toast');
@@ -991,6 +1019,8 @@
 
         document.getElementById('renormalizeBtn').addEventListener('click', renormalize);
         document.getElementById('clearUndetectedBtn').addEventListener('click', clearUndetected);
+        document.getElementById('flipHorizontalBtn').addEventListener('click', flipHorizontal);
+        document.getElementById('flipVerticalBtn').addEventListener('click', flipVertical);
 
         // Close modal on backdrop click
         document.getElementById('exportModal').addEventListener('click', (e) => {

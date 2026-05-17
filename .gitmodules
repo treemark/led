@@ -1,0 +1,3 @@
+[submodule "submodules/marquee"]
+	path = submodules/marquee
+	url = https://github.com/chromaglow/PixelBlaze-scrolling-text-upgrade.git
