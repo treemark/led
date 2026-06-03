@@ -1,2 +1,6 @@
 rootProject.name = 'led'
 
+include 'led-mapper'
+include 'pixel-blaze'
+include 'teensy'
+
