@@ -176,6 +176,18 @@ Important design goals:
 - Reuse the existing 3-strip electrical topology.
 - Centralize all interaction logic, light response logic, and mode logic in the Teensy.
 
+### 3.3V logic vs. 5V LED data signal
+
+The Teensy 4.0 outputs **3.3V logic** on all GPIO pins and is **not 5V tolerant** — do not apply 5V to any Teensy pin. WS2812B strips powered at 5V technically require a data HIGH of ≥ 3.5V, which puts the Teensy's 3.3V output just below the guaranteed threshold.
+
+**Initial approach (try first):** Wire the data lines directly from Teensy to strip DIN with a **330Ω series resistor** on each line. In practice this often works reliably, especially with short wire runs (< 30 cm) from Teensy to the first pixel, because the first LED re-drives the signal at full 5V for the rest of the chain.
+
+**If flickering or data errors occur, add a level shifter:**
+
+- **74AHCT125** quad buffer (DIP-14, ~$0.50 at DigiKey) — one chip handles all 3 data lines with one spare channel. Wiring: 3.3V data in on A pins, 5V-referenced output on Y pins, VCC to 5V, GND to GND.
+- Alternatively, the **SN74HCT245** octal buffer handles all 3 strips on one chip with more headroom.
+- A 330Ω resistor between the level shifter output and each strip DIN is still recommended regardless.
+
 ### Why move LED control to the Teensy
 
 The table will support interaction-heavy modes where tap detection, sound generation, and LED response must be tightly synchronized. A single controller owning:

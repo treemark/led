@@ -9,6 +9,9 @@
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/led-mapper" />
+            <option value="$PROJECT_DIR$/pixel-blaze" />
+            <option value="$PROJECT_DIR$/teensy" />
           </set>
         </option>
       </GradleProjectSettings>
